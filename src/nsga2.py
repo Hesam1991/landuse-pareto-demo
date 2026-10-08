@@ -138,10 +138,18 @@ def tournament(rank, crowd, rng):
 
 
 def nsga2(landscape, evaluate, pop_size=100, generations=200,
-          p_crossover=0.9, mutation_rate=0.01, seed=0, verbose=True):
-    """Run NSGA-II and return the final population and objective values."""
+          p_crossover=0.9, mutation_rate=0.01, seed=0, verbose=True,
+          initial_pop=None, callback=None):
+    """Run NSGA-II and return the first-front maps and their objective values.
+
+    initial_pop : optional list of maps used to seed the first population
+                  (the rest is filled with random maps).
+    callback    : optional function(generation, pop, F) called after every
+                  generation, e.g. to record convergence.
+    """
     rng = np.random.default_rng(seed)
-    pop = [random_map(landscape, rng) for _ in range(pop_size)]
+    seeds = [repair(m, landscape) for m in (initial_pop or [])][:pop_size]
+    pop = seeds + [random_map(landscape, rng) for _ in range(pop_size - len(seeds))]
     F = np.array([evaluate(lu, landscape) for lu in pop])
     pop, F, rank, crowd = survive(pop, F, pop_size)
 
@@ -158,6 +166,8 @@ def nsga2(landscape, evaluate, pop_size=100, generations=200,
                           for c in (c1, c2)]
         F_off = np.array([evaluate(lu, landscape) for lu in offspring])
         pop, F, rank, crowd = survive(pop + offspring, np.vstack([F, F_off]), pop_size)
+        if callback is not None:
+            callback(gen + 1, pop, F)
         if verbose and (gen + 1) % 50 == 0:
             print(f"generation {gen + 1}: {np.sum(rank == 0)} solutions on the first front")
     first = rank == 0

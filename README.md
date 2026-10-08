@@ -1,6 +1,6 @@
 # Land Use Pareto Demo
 
-A small learning prototype of **multi-objective spatial optimization of land use**. It uses a self-written NSGA-II on a synthetic raster landscape.
+A small learning prototype of **multi-objective spatial optimization of land use**. It uses an NSGA-II implemented from scratch (without an optimization library) on a synthetic raster landscape.
 
 The goal was to understand, hands-on, how Pareto frontiers show trade-offs between agricultural production and biodiversity conservation. This is not a calibrated model. All data are synthetic and the indicators are deliberately simple.
 
@@ -44,10 +44,39 @@ Some of the spread also comes from the stochastic optimizer itself (different ra
 
 ![Uncertainty](figures/4_uncertainty.png)
 
+## Extension: can learning-based methods reduce the computational cost?
+
+Computing Pareto fronts for many scenarios and uncertainty samples needs many optimization runs. Two very basic experiments explore ways to reduce this cost.
+
+### Experiment 1 – Surrogate model for an "expensive" indicator (`src/surrogate_experiment.py`)
+
+Indicators such as biodiversity often come from slow models (e.g. species distribution models). Here the biodiversity indicator is treated as expensive and every call is counted.
+
+- **Baseline:** NSGA-II evaluates every candidate map with the true indicator.
+- **Surrogate-assisted:** a ridge regression model learns the indicator from 300 true evaluations, using the one-hot land use map as input. NSGA-II then runs on the surrogate in three rounds. After each round, the final front is checked with the true indicator and added to the training data.
+
+| | True indicator evaluations | Hypervolume |
+|---|---|---|
+| Baseline | 20,100 | 100% |
+| Surrogate-assisted | 600 | 98.6% |
+
+The surrogate-assisted front is almost identical while using about **33 times fewer** true evaluations. In this toy problem the "expensive" indicator is actually cheap, so wall-clock time does not change. The saving only matters when the real indicator is slow. The indicator here is also close to linear in the land use of each cell, which makes it easy to learn. Real indicators would likely need more flexible models (e.g. convolutional neural networks) and more training data.
+
+![Surrogate](figures/5_surrogate.png)
+
+### Experiment 2 – Reusing solutions across scenarios (`src/scenario_experiment.py`)
+
+Scenario B is a simple "drier climate", in which crop yield drops by up to 40% from south to north. NSGA-II for scenario B is started either from random maps or from the Pareto front of scenario A (seeding).
+
+The seeded runs start at a higher hypervolume than the random-start runs reach after 100 generations (mean of 3 runs).
+
+![Scenario seeding](figures/6_scenario_seeding.png)
+
+This comparison is not a fair cost comparison: the seeded runs reuse the 200 generations already spent on scenario A. The point is that, when many related scenarios must be optimized, earlier results can be reused instead of starting from zero each time. This is plain seeding, not machine learning. A learning-based version, for example a model conditioned on scenario or stakeholder weights that directly proposes good maps, is a natural next step.
+
 ## Limitations and possible next steps
 
 - Synthetic data and simplified indicators. Real indicators would come from, for example, species distribution models and yield or price data.
-- Each objective evaluation is cheap here. With expensive indicator models, **learning-based surrogates** could reduce computation time.
 - A full Monte Carlo over input uncertainty is costly. More efficient approaches exist (e.g. exterior sampling with seeding).
 - Comparison with a library implementation (e.g. pymoo) and with other algorithms.
 
@@ -57,6 +86,8 @@ Some of the spread also comes from the stochastic optimizer itself (different ra
 pip install -r requirements.txt
 python src/run.py                      # full run (~4 min)
 python src/run.py --skip-uncertainty   # without the uncertainty test (~1 min)
+python src/surrogate_experiment.py     # experiment 1 (~2 min)
+python src/scenario_experiment.py      # experiment 2 (~3.5 min)
 ```
 
 ## References
